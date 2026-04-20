@@ -24,16 +24,41 @@ PLATFORMS = {k: info.label for k, info in _PLATFORMS.items() if k != "api_server
 
 # ─── Config Helpers ───────────────────────────────────────────────────────────
 
+
+def _normalize_string_set(values) -> Set[str]:
+    """Normalize a skill-name value to a set of strings.
+
+    Handles the common YAML shapes that ``skills.disabled`` and
+    ``skills.platform_disabled.<platform>`` can take:
+
+    * ``None``   → ``set()``
+    * ``"foo"``  → ``{"foo"}``   (scalar string, not split into chars)
+    * ``["foo"]``→ ``{"foo"}``   (normal list)
+    * ``[]``     → ``set()``      (empty list)
+
+    Mirrors ``agent.skill_utils._normalize_string_set`` so the CLI
+    config helpers tolerate the same malformed-but-plausible inputs
+    that the runtime skill loader already handles gracefully.
+    """
+    if values is None:
+        return set()
+    if isinstance(values, str):
+        values = [values]
+    return {str(v).strip() for v in values if str(v).strip()}
+
+
 def get_disabled_skills(config: dict, platform: Optional[str] = None) -> Set[str]:
     """Return disabled skill names. Platform-specific list falls back to global."""
-    skills_cfg = config.get("skills", {})
-    global_disabled = set(skills_cfg.get("disabled", []))
+    skills_cfg = config.get("skills") or {}
+    if not isinstance(skills_cfg, dict):
+        return set()
+    global_disabled = _normalize_string_set(skills_cfg.get("disabled"))
     if platform is None:
         return global_disabled
-    platform_disabled = skills_cfg.get("platform_disabled", {}).get(platform)
+    platform_disabled = (skills_cfg.get("platform_disabled") or {}).get(platform)
     if platform_disabled is None:
         return global_disabled
-    return set(platform_disabled)
+    return _normalize_string_set(platform_disabled)
 
 
 def save_disabled_skills(config: dict, disabled: Set[str], platform: Optional[str] = None):

@@ -458,13 +458,22 @@ class ProcessRegistry:
         quoted_temp_dir = shlex.quote(temp_dir)
         quoted_log_path = shlex.quote(log_path)
         quoted_pid_path = shlex.quote(pid_path)
-        quoted_exit_path = shlex.quote(exit_path)
-        bg_command = (
-            f"mkdir -p {quoted_temp_dir} && "
-            f"( nohup bash -lc {quoted_command} > {quoted_log_path} 2>&1; "
-            f"rc=$?; printf '%s\\n' \"$rc\" > {quoted_exit_path} ) & "
-            f"echo $! > {quoted_pid_path} && cat {quoted_pid_path}"
-        )
+        if _IS_WINDOWS:
+            # Windows: use cmd.exe with proper quoting
+            quoted_command = command.replace('"', '^"')  # Escape quotes for cmd
+            bg_command = (
+                f'mkdir {quoted_temp_dir} 2>nul && '
+                f'start /B cmd /c "{quoted_command} > {quoted_log_path} 2>&1" && '
+                f'echo %! > {quoted_pid_path} && type {quoted_pid_path}'
+            )
+        else:
+            quoted_command = shlex.quote(command)
+            bg_command = (
+                f"mkdir -p {quoted_temp_dir} && "
+                f"( nohup bash -lc {quoted_command} > {quoted_log_path} 2>&1; "
+                f"rc=$?; printf '%s\\n' \"$rc\" > {quoted_exit_path} ) & "
+                f"echo $! > {quoted_pid_path} && cat {quoted_pid_path}"
+            )
 
         try:
             result = env.execute(bg_command, timeout=timeout)
@@ -554,10 +563,12 @@ class ProcessRegistry:
                         self._check_watch_patterns(session, delta)
 
                 # Check if process is still running
-                check = env.execute(
-                    f"kill -0 \"$(cat {quoted_pid_path} 2>/dev/null)\" 2>/dev/null; echo $?",
-                    timeout=5,
-                )
+                if _IS_WINDOWS:
+                    # Windows: use tasklist to check if PID exists
+                    check_cmd = f'tasklist /FI "PID eq $(cat {quoted_pid_path} 2>nul)" 2>nul | findstr /I "PID" >nul && echo 0 || echo 1'
+                else:
+                    check_cmd = f"kill -0 \"$(cat {quoted_pid_path} 2>/dev/null)\" 2>/dev/null; echo $?"
+                check = env.execute(check_cmd, timeout=5)
                 check_output = check.get("output", "").strip()
                 if check_output and check_output.splitlines()[-1].strip() != "0":
                     # Process has exited -- get exit code captured by the wrapper shell.
@@ -1167,32 +1178,31 @@ PROCESS_SCHEMA = {
 
 
 def _handle_process(args, **kw):
-    import json as _json
     task_id = kw.get("task_id")
     action = args.get("action", "")
     # Coerce to string — some models send session_id as an integer
     session_id = str(args.get("session_id", "")) if args.get("session_id") is not None else ""
 
     if action == "list":
-        return _json.dumps({"processes": process_registry.list_sessions(task_id=task_id)}, ensure_ascii=False)
+        return json.dumps({"processes": process_registry.list_sessions(task_id=task_id)}, ensure_ascii=False)
     elif action in ("poll", "log", "wait", "kill", "write", "submit", "close"):
         if not session_id:
             return tool_error(f"session_id is required for {action}")
         if action == "poll":
-            return _json.dumps(process_registry.poll(session_id), ensure_ascii=False)
+            return json.dumps(process_registry.poll(session_id), ensure_ascii=False)
         elif action == "log":
-            return _json.dumps(process_registry.read_log(
+            return json.dumps(process_registry.read_log(
                 session_id, offset=args.get("offset", 0), limit=args.get("limit", 200)), ensure_ascii=False)
         elif action == "wait":
-            return _json.dumps(process_registry.wait(session_id, timeout=args.get("timeout")), ensure_ascii=False)
+            return json.dumps(process_registry.wait(session_id, timeout=args.get("timeout")), ensure_ascii=False)
         elif action == "kill":
-            return _json.dumps(process_registry.kill_process(session_id), ensure_ascii=False)
+            return json.dumps(process_registry.kill_process(session_id), ensure_ascii=False)
         elif action == "write":
-            return _json.dumps(process_registry.write_stdin(session_id, str(args.get("data", ""))), ensure_ascii=False)
+            return json.dumps(process_registry.write_stdin(session_id, str(args.get("data", ""))), ensure_ascii=False)
         elif action == "submit":
-            return _json.dumps(process_registry.submit_stdin(session_id, str(args.get("data", ""))), ensure_ascii=False)
+            return json.dumps(process_registry.submit_stdin(session_id, str(args.get("data", ""))), ensure_ascii=False)
         elif action == "close":
-            return _json.dumps(process_registry.close_stdin(session_id), ensure_ascii=False)
+            return json.dumps(process_registry.close_stdin(session_id), ensure_ascii=False)
     return tool_error(f"Unknown process action: {action}. Use: list, poll, log, wait, kill, write, submit, close")
 
 

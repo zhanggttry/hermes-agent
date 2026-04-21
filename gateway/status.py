@@ -22,6 +22,15 @@ from pathlib import Path
 from hermes_constants import get_hermes_home
 from typing import Any, Optional
 
+# Cross-platform signal helpers (Windows-safe alternatives to os.kill(pid,0))
+from hermes_cli.signal_compat import (
+    pid_exists,
+    get_process_start_time as _get_process_start_time,
+    read_process_cmdline as _read_process_cmdline,
+    send_signal,
+    send_kill_or_term,
+)
+
 _GATEWAY_KIND = "hermes-gateway"
 _RUNTIME_STATUS_FILE = "gateway_state.json"
 _LOCKS_DIRNAME = "gateway-locks"
@@ -59,25 +68,11 @@ def terminate_pid(pid: int, *, force: bool = False) -> None:
     POSIX uses SIGTERM/SIGKILL. Windows uses taskkill /T /F for true force-kill
     because os.kill(..., SIGTERM) is not equivalent to a tree-killing hard stop.
     """
-    if force and _IS_WINDOWS:
-        try:
-            result = subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except FileNotFoundError:
-            os.kill(pid, signal.SIGTERM)
-            return
-
-        if result.returncode != 0:
-            details = (result.stderr or result.stdout or "").strip()
-            raise OSError(details or f"taskkill failed for PID {pid}")
+    if force:
+        send_kill_or_term(pid)
         return
 
-    sig = signal.SIGTERM if not force else getattr(signal, "SIGKILL", signal.SIGTERM)
-    os.kill(pid, sig)
+    send_signal(pid, signal.SIGTERM)
 
 
 def _scope_hash(identity: str) -> str:
@@ -86,29 +81,6 @@ def _scope_hash(identity: str) -> str:
 
 def _get_scope_lock_path(scope: str, identity: str) -> Path:
     return _get_lock_dir() / f"{scope}-{_scope_hash(identity)}.lock"
-
-
-def _get_process_start_time(pid: int) -> Optional[int]:
-    """Return the kernel start time for a process when available."""
-    stat_path = Path(f"/proc/{pid}/stat")
-    try:
-        # Field 22 in /proc/<pid>/stat is process start time (clock ticks).
-        return int(stat_path.read_text().split()[21])
-    except (FileNotFoundError, IndexError, PermissionError, ValueError, OSError):
-        return None
-
-
-def _read_process_cmdline(pid: int) -> Optional[str]:
-    """Return the process command line as a space-separated string."""
-    cmdline_path = Path(f"/proc/{pid}/cmdline")
-    try:
-        raw = cmdline_path.read_bytes()
-    except (FileNotFoundError, PermissionError, OSError):
-        return None
-
-    if not raw:
-        return None
-    return raw.replace(b"\x00", b" ").decode("utf-8", errors="ignore").strip()
 
 
 def _looks_like_gateway_process(pid: int) -> bool:
@@ -225,8 +197,28 @@ def _cleanup_invalid_pid_path(pid_path: Path, *, cleanup_stale: bool) -> None:
 
 
 def write_pid_file() -> None:
-    """Write the current process PID and metadata to the gateway PID file."""
-    _write_json_file(_get_pid_path(), _build_pid_record())
+    """Write the current process PID and metadata to the gateway PID file.
+
+    Uses atomic O_CREAT | O_EXCL creation so that concurrent --replace
+    invocations race: exactly one process wins and the rest get
+    FileExistsError.
+    """
+    path = _get_pid_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = json.dumps(_build_pid_record())
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise  # Let caller decide: another gateway is racing us
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(record)
+    except Exception:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def write_runtime_status(
@@ -339,9 +331,8 @@ def acquire_scoped_lock(scope: str, identity: str, metadata: Optional[dict[str, 
 
         stale = existing_pid is None
         if not stale:
-            try:
-                os.kill(existing_pid, 0)
-            except (ProcessLookupError, PermissionError):
+            # Windows-compatible PID existence check via signal_compat
+            if not pid_exists(existing_pid):
                 stale = True
             else:
                 current_start = _get_process_start_time(existing_pid)
@@ -354,7 +345,8 @@ def acquire_scoped_lock(scope: str, identity: str, metadata: Optional[dict[str, 
                 # Check if process is stopped (Ctrl+Z / SIGTSTP) — stopped
                 # processes still respond to os.kill(pid, 0) but are not
                 # actually running. Treat them as stale so --replace works.
-                if not stale:
+                # On Windows, /proc does not exist, so skip this check.
+                if not stale and not _IS_WINDOWS:
                     try:
                         _proc_status = Path(f"/proc/{existing_pid}/status")
                         if _proc_status.exists():
@@ -574,9 +566,8 @@ def get_running_pid(
         _cleanup_invalid_pid_path(resolved_pid_path, cleanup_stale=cleanup_stale)
         return None
 
-    try:
-        os.kill(pid, 0)  # signal 0 = existence check, no actual signal sent
-    except (ProcessLookupError, PermissionError):
+    # Windows-compatible PID existence check via signal_compat
+    if not pid_exists(pid):
         _cleanup_invalid_pid_path(resolved_pid_path, cleanup_stale=cleanup_stale)
         return None
 

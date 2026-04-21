@@ -20,6 +20,7 @@ Usage::
 """
 
 import json
+from hermes_cli.signal_compat import pid_exists as _pid_exists_compat, send_signal as _send_signal_compat, send_kill_or_term as _send_kill_or_term_compat
 import os
 import re
 import shutil
@@ -649,20 +650,15 @@ def _stop_gateway_process(profile_dir: Path) -> None:
         raw = pid_file.read_text().strip()
         data = json.loads(raw) if raw.startswith("{") else {"pid": int(raw)}
         pid = int(data["pid"])
-        os.kill(pid, _signal.SIGTERM)
+        _send_signal_compat(pid, _signal.SIGTERM)
         # Wait up to 10s for graceful shutdown
         for _ in range(20):
             _time.sleep(0.5)
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
+            if not _pid_exists_compat(pid):
                 print(f"✓ Gateway stopped (PID {pid})")
                 return
         # Force kill
-        try:
-            os.kill(pid, _signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        _send_kill_or_term_compat(pid)
         print(f"✓ Gateway force-stopped (PID {pid})")
     except (ProcessLookupError, PermissionError):
         print("✓ Gateway already stopped")

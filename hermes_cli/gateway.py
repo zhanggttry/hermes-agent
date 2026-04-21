@@ -6,6 +6,7 @@ Handles: hermes gateway [run|start|stop|restart|status|install|uninstall|setup]
 
 import asyncio
 import os
+from hermes_cli.signal_compat import pid_exists as _pid_exists_compat, send_signal as _send_signal_compat
 import shutil
 import signal
 import subprocess
@@ -454,7 +455,7 @@ def stop_profile_gateway() -> bool:
         return False
 
     try:
-        os.kill(pid, signal.SIGTERM)
+        _send_signal_compat(pid, signal.SIGTERM)
     except ProcessLookupError:
         pass  # Already gone
     except PermissionError:
@@ -464,11 +465,9 @@ def stop_profile_gateway() -> bool:
     # Wait briefly for it to exit
     import time as _time
     for _ in range(20):
-        try:
-            os.kill(pid, 0)
-            _time.sleep(0.5)
-        except (ProcessLookupError, PermissionError):
+        if not _pid_exists_compat(pid):
             break
+        _time.sleep(0.5)
 
     remove_pid_file()
     return True
@@ -994,8 +993,6 @@ def get_systemd_linger_status() -> tuple[bool | None, str]:
     if not is_linux():
         return None, "not supported on this platform"
 
-    import shutil
-
     if not shutil.which("loginctl"):
         return None, "loginctl not found"
 
@@ -1347,7 +1344,6 @@ def _ensure_linger_enabled() -> None:
         return
 
     import getpass
-    import shutil
 
     username = getpass.getuser()
     linger_file = Path(f"/var/lib/systemd/linger/{username}")
@@ -1521,11 +1517,9 @@ def systemd_restart(system: bool = False):
         print(f"⏳ {scope_label} service draining active work...")
         deadline = time.time() + 90
         while time.time() < deadline:
-            try:
-                os.kill(pid, 0)
-                time.sleep(1)
-            except (ProcessLookupError, PermissionError):
+            if not _pid_exists_compat(pid):
                 break  # old process is gone
+            time.sleep(1)
         else:
             print(f"⚠ Old process (PID {pid}) still alive after 90s")
 
@@ -1656,7 +1650,6 @@ def get_launchd_label() -> str:
 
 
 def _launchd_domain() -> str:
-    import os
     return f"gui/{os.getuid()}"
 
 

@@ -795,7 +795,7 @@ class GatewayRunner:
 
     def _load_voice_modes(self) -> Dict[str, str]:
         try:
-            data = json.loads(self._VOICE_MODE_PATH.read_text())
+            data = json.loads(self._VOICE_MODE_PATH.read_text(encoding="utf-8"))
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             return {}
 
@@ -1769,7 +1769,7 @@ class GatewayRunner:
 
         path = _hermes_home / self._STUCK_LOOP_FILE
         try:
-            counts = json.loads(path.read_text()) if path.exists() else {}
+            counts = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         except Exception:
             counts = {}
 
@@ -1799,7 +1799,7 @@ class GatewayRunner:
             return 0
 
         try:
-            counts = json.loads(path.read_text())
+            counts = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return 0
 
@@ -1845,7 +1845,7 @@ class GatewayRunner:
         if not path.exists():
             return
         try:
-            counts = json.loads(path.read_text())
+            counts = json.loads(path.read_text(encoding="utf-8"))
             if session_key in counts:
                 del counts[session_key]
                 if counts:
@@ -5244,7 +5244,7 @@ class GatewayRunner:
             marker_path = _hermes_home / ".restart_last_processed.json"
             if not marker_path.exists():
                 return False
-            data = json.loads(marker_path.read_text())
+            data = json.loads(marker_path.read_text(encoding="utf-8"))
         except Exception:
             return False
 
@@ -7788,7 +7788,7 @@ class GatewayRunner:
         for path in (claimed_path, pending_path):
             if path.exists():
                 try:
-                    pending = json.loads(path.read_text())
+                    pending = json.loads(path.read_text(encoding="utf-8"))
                     platform_str = pending.get("platform")
                     chat_id = pending.get("chat_id")
                     session_key = pending.get("session_key")
@@ -7849,7 +7849,7 @@ class GatewayRunner:
                 # Read any remaining output
                 if output_path.exists():
                     try:
-                        content = output_path.read_text()
+                        content = output_path.read_text(encoding="utf-8")
                         if len(content) > bytes_sent:
                             buffer += content[bytes_sent:]
                             bytes_sent = len(content)
@@ -7859,7 +7859,7 @@ class GatewayRunner:
 
                 # Send final status
                 try:
-                    exit_code_raw = exit_code_path.read_text().strip() or "1"
+                    exit_code_raw = exit_code_path.read_text(encoding="utf-8").strip() or "1"
                     exit_code = int(exit_code_raw)
                     if exit_code == 0:
                         await adapter.send(chat_id, "✅ Hermes update finished.")
@@ -7880,7 +7880,7 @@ class GatewayRunner:
             # Check for new output
             if output_path.exists():
                 try:
-                    content = output_path.read_text()
+                    content = output_path.read_text(encoding="utf-8")
                     if len(content) > bytes_sent:
                         buffer += content[bytes_sent:]
                         bytes_sent = len(content)
@@ -7898,7 +7898,7 @@ class GatewayRunner:
             if (prompt_path.exists() and session_key
                     and not self._update_prompt_pending.get(session_key)):
                 try:
-                    prompt_data = json.loads(prompt_path.read_text())
+                    prompt_data = json.loads(prompt_path.read_text(encoding="utf-8"))
                     prompt_text = prompt_data.get("prompt", "")
                     default = prompt_data.get("default", "")
                     if prompt_text:
@@ -7984,7 +7984,7 @@ class GatewayRunner:
             elif not claimed_path.exists():
                 return True
 
-            pending = json.loads(claimed_path.read_text())
+            pending = json.loads(claimed_path.read_text(encoding="utf-8"))
             platform_str = pending.get("platform")
             chat_id = pending.get("chat_id")
 
@@ -7995,13 +7995,13 @@ class GatewayRunner:
                 claimed_path.replace(pending_path)
                 return False
 
-            exit_code_raw = exit_code_path.read_text().strip() or "1"
+            exit_code_raw = exit_code_path.read_text(encoding="utf-8").strip() or "1"
             exit_code = int(exit_code_raw)
 
             # Read the captured update output
             output = ""
             if output_path.exists():
-                output = output_path.read_text()
+                output = output_path.read_text(encoding="utf-8")
 
             # Resolve adapter
             platform = Platform(platform_str)
@@ -8047,7 +8047,7 @@ class GatewayRunner:
             return
 
         try:
-            data = json.loads(notify_path.read_text())
+            data = json.loads(notify_path.read_text(encoding="utf-8"))
             platform_str = data.get("platform")
             chat_id = data.get("chat_id")
             thread_id = data.get("thread_id")
@@ -10804,7 +10804,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
                 try:
                     os.kill(existing_pid, 0)
                     time.sleep(0.5)
-                except (ProcessLookupError, PermissionError):
+                except (ProcessLookupError, PermissionError, OSError):
                     break  # Process is gone
             else:
                 # Still alive after 10s — force kill

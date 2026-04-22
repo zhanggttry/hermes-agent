@@ -2259,7 +2259,7 @@ def mount_spa(application: FastAPI):
 
     def _serve_index():
         """Return index.html with the session token injected."""
-        html = _index_path.read_text()
+        html = _index_path.read_text(encoding="utf-8")
         token_script = (
             f'<script>window.__HERMES_SESSION_TOKEN__="{_SESSION_TOKEN}";</script>'
         )

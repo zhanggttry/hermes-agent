@@ -609,7 +609,7 @@ def _reap_orphaned_browser_sessions():
         owner_alive: Optional[bool] = None  # None = owner_pid missing/unreadable
         if os.path.isfile(owner_pid_file):
             try:
-                owner_pid = int(Path(owner_pid_file).read_text().strip())
+                owner_pid = int(Path(owner_pid_file).read_text(encoding="utf-8").strip())
                 try:
                     os.kill(owner_pid, 0)
                     owner_alive = True
@@ -640,7 +640,7 @@ def _reap_orphaned_browser_sessions():
             continue
 
         try:
-            daemon_pid = int(Path(pid_file).read_text().strip())
+            daemon_pid = int(Path(pid_file).read_text(encoding="utf-8").strip())
         except (ValueError, OSError):
             shutil.rmtree(socket_dir, ignore_errors=True)
             continue
@@ -1213,9 +1213,9 @@ def _run_browser_command(
                            command, timeout, task_id, task_socket_dir)
             return {"success": False, "error": f"Command timed out after {timeout} seconds"}
 
-        with open(stdout_path, "r") as f:
+        with open(stdout_path, "r", encoding="utf-8") as f:
             stdout = f.read()
-        with open(stderr_path, "r") as f:
+        with open(stderr_path, "r", encoding="utf-8") as f:
             stderr = f.read()
         returncode = proc.returncode
 
@@ -2297,7 +2297,7 @@ def cleanup_browser(task_id: Optional[str] = None) -> None:
                 pid_file = os.path.join(socket_dir, f"{session_name}.pid")
                 if os.path.isfile(pid_file):
                     try:
-                        daemon_pid = int(Path(pid_file).read_text().strip())
+                        daemon_pid = int(Path(pid_file).read_text(encoding="utf-8").strip())
                         os.kill(daemon_pid, signal.SIGTERM)
                         logger.debug("Killed daemon pid %s for %s", daemon_pid, session_name)
                     except (ProcessLookupError, ValueError, PermissionError, OSError):

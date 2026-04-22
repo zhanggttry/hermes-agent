@@ -206,7 +206,7 @@ def check_alias_collision(name: str) -> Optional[str]:
             # Allow overwriting our own wrappers
             if existing_path == str(wrapper_dir / name):
                 try:
-                    content = (wrapper_dir / name).read_text()
+                    content = (wrapper_dir / name).read_text(encoding="utf-8")
                     if "hermes -p" in content:
                         return None  # it's our wrapper, safe to overwrite
                 except Exception:
@@ -252,7 +252,7 @@ def remove_wrapper_script(name: str) -> bool:
     if wrapper_path.exists():
         try:
             # Verify it's our wrapper before removing
-            content = wrapper_path.read_text()
+            content = wrapper_path.read_text(encoding="utf-8")
             if "hermes -p" in content:
                 wrapper_path.unlink()
                 return True
@@ -286,7 +286,7 @@ def _read_config_model(profile_dir: Path) -> tuple:
         return None, None
     try:
         import yaml
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
         model_cfg = cfg.get("model", {})
         if isinstance(model_cfg, str):
@@ -646,7 +646,7 @@ def _stop_gateway_process(profile_dir: Path) -> None:
         return
 
     try:
-        raw = pid_file.read_text().strip()
+        raw = pid_file.read_text(encoding="utf-8").strip()
         data = json.loads(raw) if raw.startswith("{") else {"pid": int(raw)}
         pid = int(data["pid"])
         os.kill(pid, _signal.SIGTERM)
@@ -664,7 +664,7 @@ def _stop_gateway_process(profile_dir: Path) -> None:
         except ProcessLookupError:
             pass
         print(f"✓ Gateway force-stopped (PID {pid})")
-    except (ProcessLookupError, PermissionError):
+    except (ProcessLookupError, PermissionError, OSError):
         print("✓ Gateway already stopped")
     except Exception as e:
         print(f"⚠ Could not stop gateway: {e}")
@@ -681,7 +681,7 @@ def get_active_profile() -> str:
     """
     path = _get_active_profile_path()
     try:
-        name = path.read_text().strip()
+        name = path.read_text(encoding="utf-8").strip()
         if not name:
             return "default"
         return name

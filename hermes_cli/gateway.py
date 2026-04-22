@@ -467,7 +467,7 @@ def stop_profile_gateway() -> bool:
         try:
             os.kill(pid, 0)
             _time.sleep(0.5)
-        except (ProcessLookupError, PermissionError):
+        except (ProcessLookupError, PermissionError, OSError):
             break
 
     remove_pid_file()
@@ -1521,7 +1521,7 @@ def systemd_restart(system: bool = False):
             try:
                 os.kill(pid, 0)
                 time.sleep(1)
-            except (ProcessLookupError, PermissionError):
+            except (ProcessLookupError, PermissionError, OSError):
                 break  # old process is gone
         else:
             print(f"⚠ Old process (PID {pid}) still alive after 90s")

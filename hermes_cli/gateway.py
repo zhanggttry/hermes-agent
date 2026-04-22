@@ -467,7 +467,7 @@ def stop_profile_gateway() -> bool:
         try:
             os.kill(pid, 0)
             _time.sleep(0.5)
-        except (ProcessLookupError, PermissionError):
+        except (ProcessLookupError, PermissionError, OSError):
             break
 
     remove_pid_file()
@@ -994,8 +994,6 @@ def get_systemd_linger_status() -> tuple[bool | None, str]:
     if not is_linux():
         return None, "not supported on this platform"
 
-    import shutil
-
     if not shutil.which("loginctl"):
         return None, "loginctl not found"
 
@@ -1347,7 +1345,6 @@ def _ensure_linger_enabled() -> None:
         return
 
     import getpass
-    import shutil
 
     username = getpass.getuser()
     linger_file = Path(f"/var/lib/systemd/linger/{username}")
@@ -1524,7 +1521,7 @@ def systemd_restart(system: bool = False):
             try:
                 os.kill(pid, 0)
                 time.sleep(1)
-            except (ProcessLookupError, PermissionError):
+            except (ProcessLookupError, PermissionError, OSError):
                 break  # old process is gone
         else:
             print(f"⚠ Old process (PID {pid}) still alive after 90s")
@@ -1656,7 +1653,6 @@ def get_launchd_label() -> str:
 
 
 def _launchd_domain() -> str:
-    import os
     return f"gui/{os.getuid()}"
 
 

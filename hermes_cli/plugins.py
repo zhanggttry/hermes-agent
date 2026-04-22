@@ -70,6 +70,7 @@ VALID_HOOKS: Set[str] = {
     "on_session_end",
     "on_session_finalize",
     "on_session_reset",
+    "subagent_stop",
 }
 
 ENTRY_POINTS_GROUP = "hermes_agent.plugins"
@@ -568,7 +569,7 @@ class PluginManager:
                 if yaml is None:
                     logger.warning("PyYAML not installed – cannot load %s", manifest_file)
                     continue
-                data = yaml.safe_load(manifest_file.read_text()) or {}
+                data = yaml.safe_load(manifest_file.read_text(encoding="utf-8")) or {}
                 manifest = PluginManifest(
                     name=data.get("name", child.name),
                     version=str(data.get("version", "")),

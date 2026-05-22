@@ -165,7 +165,7 @@ def _apply_profile_override() -> None:
 
             active_path = get_default_hermes_root() / "active_profile"
             if active_path.exists():
-                name = active_path.read_text().strip()
+                name = active_path.read_text(encoding="utf-8").strip()
                 if name and name != "default":
                     profile_name = name
                     consume = 0  # don't strip anything from argv
@@ -357,7 +357,7 @@ def _has_any_provider_configured() -> bool:
         try:
             import json
 
-            auth = json.loads(auth_file.read_text())
+            auth = json.loads(auth_file.read_text(encoding="utf-8"))
             active = auth.get("active_provider")
             if active:
                 status = get_auth_status(active)
@@ -626,7 +626,7 @@ def _session_browse_picker(sessions: list) -> Optional[str]:
     while True:
         try:
             val = input(f"\n  Select [1-{len(sessions)}]: ").strip()
-            if not val or val.lower() in {"q", "quit", "exit"}:
+            if not val or val.lower() in ("q", "quit", "exit"):
                 return None
             idx = int(val) - 1
             if 0 <= idx < len(sessions):
@@ -1080,7 +1080,7 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
             return [node, str(bundled)], bundled.parent
 
     # 2. Normal flow: npm install if needed, always esbuild, then node dist/entry.js.
-    #    --dev flow: npm install if needed, then tsx src/entry.tsx (no build).
+    #    --dev flow: npm install if needed, then tsx src/entry.tsx.
     if _tui_need_npm_install(tui_dir):
         npm = _node_bin("npm")
         if not os.environ.get("HERMES_QUIET"):
@@ -1102,10 +1102,30 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
             sys.exit(1)
 
     if tui_dev:
+        # Keep the local @hermes/ink package exports in sync with source.
+        # --dev runs src/entry.tsx directly, but @hermes/ink resolves through
+        # packages/hermes-ink/dist/entry-exports.js. If that dist bundle is
+        # stale after a pull, newer hooks/components can exist in src while
+        # being missing at runtime (e.g. useCursorAdvance). Prebuild it here.
+        npm = _node_bin("npm")
+        ink_dir = tui_dir / "packages" / "hermes-ink"
+        result = subprocess.run(
+            [npm, "run", "build"],
+            cwd=str(ink_dir),
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            combined = f"{result.stdout or ''}{result.stderr or ''}".strip()
+            preview = "\n".join(combined.splitlines()[-30:])
+            print("TUI dev prebuild failed.")
+            if preview:
+                print(preview)
+            sys.exit(1)
+
         tsx = tui_dir / "node_modules" / ".bin" / "tsx"
         if tsx.exists():
             return [str(tsx), "src/entry.tsx"], tui_dir
-        npm = _node_bin("npm")
         return [npm, "start"], tui_dir
 
     # Always rebuild — esbuild is fast and this avoids staleness-edge-case bugs.
@@ -7226,17 +7246,24 @@ def _update_node_dependencies() -> None:
         if not (path / "package.json").exists():
             continue
 
+        # Stream npm output (no `--silent`, no `capture_output`) so any
+        # optional dependency postinstall scripts (e.g. `agent-browser`'s
+        # Chromium fetch on first install) print progress instead of
+        # appearing to hang silently for minutes (#18840).  The
+        # `_UpdateOutputStream` wrapper installed by the updater mirrors
+        # streamed output to ``~/.hermes/logs/update.log`` so nothing is lost.
         result = _run_npm_install_deterministic(
             npm,
             path,
-            extra_args=("--silent", "--no-fund", "--no-audit", "--progress=false"),
+            extra_args=("--no-fund", "--no-audit", "--progress=false"),
+            capture_output=False,
         )
         if result.returncode == 0:
             print(f"  ✓ {label}")
             continue
 
         print(f"  ⚠ npm install failed in {label}")
-        stderr = (result.stderr or "").strip()
+        stderr = (result.stderr or "").strip() if result.stderr else ""
         if stderr:
             print(f"    {stderr.splitlines()[-1]}")
 
@@ -9604,7 +9631,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "config", "cron", "curator", "dashboard", "debug", "doctor",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
         "kanban", "login", "logout", "logs", "lsp", "mcp", "memory",
-        "model", "pairing", "plugins", "postinstall", "profile", "proxy", "sessions", "setup",
+        "model", "pairing", "plugins", "postinstall", "profile", "proxy", "send", "sessions", "setup",
         "skills", "slack", "status", "tools", "uninstall", "update",
         "version", "webhook", "whatsapp", "chat",
         # Help-ish invocations — plugin commands not being listed in
@@ -10111,6 +10138,12 @@ def main():
         "into an existing manifest manually).",
     )
     slack_parser.set_defaults(func=cmd_slack)
+
+    # =========================================================================
+    # send command — pipe shell-script output to any configured platform
+    # =========================================================================
+    from hermes_cli.send_cmd import register_send_subparser
+    register_send_subparser(subparsers)
 
     # =========================================================================
     # login command

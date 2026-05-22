@@ -336,7 +336,7 @@ def check_alias_collision(name: str) -> Optional[str]:
             # Allow overwriting our own wrappers
             if existing_path == str(wrapper_dir / canon):
                 try:
-                    content = (wrapper_dir / canon).read_text()
+                    content = (wrapper_dir / canon).read_text(encoding="utf-8")
                     if "hermes -p" in content:
                         return None  # it's our wrapper, safe to overwrite
                 except Exception:
@@ -383,7 +383,7 @@ def remove_wrapper_script(name: str) -> bool:
     if wrapper_path.exists():
         try:
             # Verify it's our wrapper before removing
-            content = wrapper_path.read_text()
+            content = wrapper_path.read_text(encoding="utf-8")
             if "hermes -p" in content:
                 wrapper_path.unlink()
                 return True
@@ -870,7 +870,7 @@ def _stop_gateway_process(profile_dir: Path) -> None:
         return
 
     try:
-        raw = pid_file.read_text().strip()
+        raw = pid_file.read_text(encoding="utf-8").strip()
         data = json.loads(raw) if raw.startswith("{") else {"pid": int(raw)}
         pid = int(data["pid"])
         # Route through terminate_pid so Windows uses the appropriate
@@ -911,7 +911,7 @@ def get_active_profile() -> str:
     """
     path = _get_active_profile_path()
     try:
-        name = path.read_text().strip()
+        name = path.read_text(encoding="utf-8").strip()
         if not name:
             return "default"
         return name
@@ -989,7 +989,7 @@ def _default_export_ignore(root_dir: Path):
             if entry == "__pycache__" or entry.endswith((".sock", ".tmp")):
                 ignored.add(entry)
             # npm lockfiles can appear at root
-            elif entry in {"package.json", "package-lock.json"}:
+            elif entry in ("package.json", "package-lock.json"):
                 ignored.add(entry)
         # Root-level exclusions
         if Path(directory) == root_dir:
@@ -1057,7 +1057,7 @@ def _normalize_profile_archive_parts(member_name: str) -> List[str]:
     ):
         raise ValueError(f"Unsafe archive member path: {member_name}")
 
-    parts = [part for part in posix_path.parts if part not in {"", "."}]
+    parts = [part for part in posix_path.parts if part not in ("", ".")]
     if not parts or any(part == ".." for part in parts):
         raise ValueError(f"Unsafe archive member path: {member_name}")
     return parts

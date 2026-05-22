@@ -1086,6 +1086,7 @@ AUTHOR_MAP = {
     "nightcityblade@gmail.com": "nightcityblade",  # PR #24138 (docs voice/tts table)
     "pol.kuijken@gmail.com": "polkn",  # PR #6136 salvage (skill_view collision refusal)
     "robin@soal.org": "rewbs",
+    "zhanggttry@163.com": "zhanggttry",
 }
 
 

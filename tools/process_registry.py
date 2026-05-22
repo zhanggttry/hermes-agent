@@ -557,6 +557,7 @@ class ProcessRegistry:
             stderr=subprocess.STDOUT,
             stdin=subprocess.PIPE,
             preexec_fn=None if _IS_WINDOWS else os.setsid,
+            creationflags=subprocess.CREATE_NO_WINDOW if _IS_WINDOWS else 0,
         )
 
         session.process = proc
@@ -1257,7 +1258,7 @@ class ProcessRegistry:
         killed = 0
         for session in targets:
             result = self.kill_process(session.id)
-            if result.get("status") in {"killed", "already_exited"}:
+            if result.get("status") in ("killed", "already_exited"):
                 killed += 1
         return killed
 
@@ -1504,7 +1505,7 @@ def _handle_process(args, **kw):
 
     if action == "list":
         return json.dumps({"processes": process_registry.list_sessions(task_id=task_id)}, ensure_ascii=False)
-    elif action in {"poll", "log", "wait", "kill", "write", "submit", "close"}:
+    elif action in ("poll", "log", "wait", "kill", "write", "submit", "close"):
         if not session_id:
             return tool_error(f"session_id is required for {action}")
         if action == "poll":

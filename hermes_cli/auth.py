@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
@@ -302,7 +302,7 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
     ),
     "alibaba": ProviderConfig(
         id="alibaba",
-        name="Qwen Cloud",
+        name="Alibaba Cloud (DashScope)",
         auth_type="api_key",
         inference_base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
         api_key_env_vars=("DASHSCOPE_API_KEY",),
@@ -966,7 +966,7 @@ def _load_auth_store(auth_file: Optional[Path] = None) -> Dict[str, Any]:
         return {"version": AUTH_STORE_VERSION, "providers": {}}
 
     try:
-        raw = json.loads(auth_file.read_text())
+        raw = json.loads(auth_file.read_text(encoding="utf-8"))
     except Exception as exc:
         corrupt_path = auth_file.with_suffix(".json.corrupt")
         try:
@@ -2610,7 +2610,7 @@ def _print_loopback_ssh_hint(redirect_uri: str, *, docs_url: str | None = None) 
         return
     host = parsed.hostname or ""
     port = parsed.port
-    if host not in ("127.0.0.1", "::1", "localhost") or not port:
+    if host not in {"127.0.0.1", "::1", "localhost"} or not port:
         return
     print()
     print("Remote session detected. Your browser will redirect to")
@@ -5246,7 +5246,7 @@ def _login_xai_oauth(
                     reuse = input("Use existing credentials? [Y/n]: ").strip().lower()
                 except (EOFError, KeyboardInterrupt):
                     reuse = "y"
-                if reuse in ("", "y", "yes"):
+                if reuse in {"", "y", "yes"}:
                     config_path = _update_config_for_provider(
                         "xai-oauth",
                         existing.get("base_url", DEFAULT_XAI_OAUTH_BASE_URL),

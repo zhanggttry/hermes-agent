@@ -191,7 +191,7 @@ def _is_accepted_host(host_header: str, bound_host: str) -> bool:
     # 0.0.0.0 bind means operator explicitly opted into all-interfaces
     # (requires --insecure per web_server.start_server). No Host-layer
     # defence can protect that mode; rely on operator network controls.
-    if bound_host in {"0.0.0.0", "::"}:
+    if bound_host in ("0.0.0.0", "::"):
         return True
 
     # Loopback bind: accept the loopback names
@@ -590,7 +590,7 @@ async def get_status():
         gateway_exit_reason = runtime.get("exit_reason")
         gateway_updated_at = runtime.get("updated_at")
         if not gateway_running:
-            gateway_state = gateway_state if gateway_state in {"stopped", "startup_failed"} else "stopped"
+            gateway_state = gateway_state if gateway_state in ("stopped", "startup_failed") else "stopped"
             gateway_platforms = {}
         elif gateway_running and remote_health_body is not None:
             # The health probe confirmed the gateway is alive, but the local
